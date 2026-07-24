@@ -283,4 +283,332 @@ def analisis_dentro_empresa(df, features, empresa):
 analisis_dentro_empresa(ratios, features_base, 'XOM')
 analisis_dentro_empresa(ratios, features_base, 'CVX')
 
+
+# ============================================================
+# GRAFICOS DE RESULTADOS
+# ============================================================
+
+# Colores por empresa (los mismos que en R)
+colores_empresa = {
+    'COP': '#7FBFFF', 'CVX': '#FFB347', 'EOG': '#98D98E',
+    'EQNR': '#FF9999', 'OXY': '#C3A6E8', 'PXD': '#FFD1A9',
+    'SHEL': '#85D4E3', 'TTE': '#F4A7B9', 'XOM': '#B5CC8E'
+}
+
+# ============================================================
+# GRAFICO 1: Heatmap de anomalias - Sin imputacion
+# ============================================================
+empresas_orden = ['XOM', 'CVX', 'SHEL', 'TTE', 'COP', 'OXY', 'EOG', 'PXD', 'EQNR']
+anos = list(range(2016, 2025))
+
+# Construir matriz de consenso
+matriz = pd.DataFrame(index=empresas_orden, columns=anos, data=0)
+for _, row in r1.iterrows():
+    emp = row['company']
+    ano = int(row['fiscal_year'])
+    if emp in empresas_orden and ano in anos:
+        matriz.loc[emp, ano] = int(row['consenso'])
+
+# Marcar observaciones sin datos (NaN en features)
+datos_disponibles = ratios[['company', 'fiscal_year'] + features_base].dropna()
+for emp in empresas_orden:
+    for ano in anos:
+        tiene_dato = len(datos_disponibles[
+            (datos_disponibles['company'] == emp) &
+            (datos_disponibles['fiscal_year'] == ano)
+        ]) > 0
+        if not tiene_dato:
+            matriz.loc[emp, ano] = -1
+
+fig, ax = plt.subplots(figsize=(14, 6))
+matriz_plot = matriz.astype(float).replace(-1, np.nan)
+sns.heatmap(
+    matriz_plot,
+    annot=True, fmt='.0f',
+    cmap='YlOrRd',
+    vmin=0, vmax=4,
+    linewidths=0.5, linecolor='white',
+    ax=ax,
+    cbar_kws={'label': 'Modelos que detectaron anomalia (0-4)'}
+)
+ax.set_title('Figura 10. Mapa de Anomalías por Empresa y Año\n(Sin imputación — celdas grises = sin dato)',
+             fontsize=13, pad=15)
+ax.set_xlabel('Año fiscal', fontsize=11)
+ax.set_ylabel('Empresa', fontsize=11)
+plt.tight_layout()
+plt.savefig('10_heatmap_anomalias_sin_imputacion.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 10 guardado")
+
+# ============================================================
+# GRAFICO 2: Heatmap de anomalias - Con imputacion
+# ============================================================
+matriz_imp = pd.DataFrame(index=empresas_orden, columns=anos, data=0)
+for _, row in r1_imp.iterrows():
+    emp = row['company']
+    ano = int(row['fiscal_year'])
+    if emp in empresas_orden and ano in anos:
+        matriz_imp.loc[emp, ano] = int(row['consenso'])
+
+fig, ax = plt.subplots(figsize=(14, 6))
+sns.heatmap(
+    matriz_imp.astype(float),
+    annot=True, fmt='.0f',
+    cmap='YlOrRd',
+    vmin=0, vmax=4,
+    linewidths=0.5, linecolor='white',
+    ax=ax,
+    cbar_kws={'label': 'Modelos que detectaron anomalia (0-4)'}
+)
+ax.set_title('Figura 11. Mapa de Anomalías por Empresa y Año\n(Con imputación por promedio de categoría)',
+             fontsize=13, pad=15)
+ax.set_xlabel('Año fiscal', fontsize=11)
+ax.set_ylabel('Empresa', fontsize=11)
+plt.tight_layout()
+plt.savefig('11_heatmap_anomalias_con_imputacion.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 11 guardado")
+
+# ============================================================
+# GRAFICO 3: Comparacion de modelos por escenario
+# ============================================================
+escenarios = [
+    ('Todas\n(sin imp.)',    r1),
+    ('Todas\n(con imp.)',    r1_imp),
+    ('Integradas\n(sin imp.)', r3),
+    ('Integradas\n(con imp.)', r3_imp),
+    ('E&P\n(sin imp.)',      r4),
+    ('E&P\n(con imp.)',      r4_imp),
+]
+
+modelos = ['IF_anomalia', 'LOF_anomalia', 'SVM_anomalia', 'KM_anomalia']
+nombres = ['Isolation Forest', 'LOF', 'One-Class SVM', 'K-Means']
+colores_modelos = ['#2166AC', '#85D4E3', '#FFB347', '#98D98E']
+
+x = np.arange(len(escenarios))
+width = 0.2
+
+fig, ax = plt.subplots(figsize=(14, 6))
+for i, (modelo, nombre, color) in enumerate(zip(modelos, nombres, colores_modelos)):
+    valores = []
+    for _, df_esc in escenarios:
+        if modelo in df_esc.columns:
+            valores.append(df_esc[modelo].sum())
+        else:
+            valores.append(0)
+    ax.bar(x + i * width, valores, width, label=nombre, color=color)
+
+ax.set_xlabel('Escenario', fontsize=11)
+ax.set_ylabel('Anomalías detectadas', fontsize=11)
+ax.set_title('Figura 12. Anomalías Detectadas por Modelo y Escenario', fontsize=13)
+ax.set_xticks(x + width * 1.5)
+ax.set_xticklabels([e[0] for e in escenarios], fontsize=9)
+ax.legend(fontsize=10)
+ax.grid(axis='y', alpha=0.3)
+plt.tight_layout()
+plt.savefig('12_comparacion_modelos_escenarios.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 12 guardado")
+
+# ============================================================
+# GRAFICO 4: Evolucion de ratios XOM con anomalias marcadas
+# ============================================================
+xom = ratios[ratios['company'] == 'XOM'].copy()
+xom_res = analisis_dentro_empresa(ratios, features_base, 'XOM')
+anos_anomalos_xom = xom_res[xom_res['anomalia_consenso'] == 1]['fiscal_year'].tolist()
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+fig.suptitle('Figura 13. Evolución de Ratios de Gasto — ExxonMobil (2016-2024)\n(Años anómalos marcados en rojo)',
+             fontsize=13)
+
+features_plot = [
+    ('dda_pct_rev',         'DD&A / Ingresos (%)'),
+    ('exploration_pct_rev', 'Exploración / Ingresos (%)'),
+    ('interest_pct_rev',    'Intereses / Ingresos (%)'),
+    ('sga_pct_rev',         'SGA / Ingresos (%)')
+]
+
+for ax, (feat, label) in zip(axes.flat, features_plot):
+    ax.plot(xom['fiscal_year'], xom[feat],
+            color='#B5CC8E', linewidth=2, marker='o', markersize=5)
+    for ano in anos_anomalos_xom:
+        val = xom[xom['fiscal_year'] == ano][feat]
+        if len(val) > 0 and not val.isna().values[0]:
+            ax.axvline(x=ano, color='red', linestyle='--', alpha=0.5)
+            ax.scatter([ano], [val.values[0]], color='red', zorder=5, s=80)
+    ax.set_title(label, fontsize=10)
+    ax.set_xlabel('Año', fontsize=9)
+    ax.set_xticks(range(2016, 2025))
+    ax.tick_params(axis='x', rotation=45)
+    ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('13_evolucion_xom_anomalias.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 13 guardado")
+
+# ============================================================
+# GRAFICO 5: Evolucion de ratios CVX con anomalias marcadas
+# ============================================================
+cvx = ratios[ratios['company'] == 'CVX'].copy()
+
+# Obtener anos anomalos CVX del analisis dentro de empresa
+xom_res = analisis_dentro_empresa(ratios, features_base, 'XOM')
+cvx_res = analisis_dentro_empresa(ratios, features_base, 'CVX')
+anos_anomalos_cvx = cvx_res[cvx_res['anomalia_consenso'] == 1]['fiscal_year'].tolist()
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+fig.suptitle('Figura 14. Evolución de Ratios de Gasto — Chevron (2016-2024)\n(Años anómalos marcados en rojo)',
+             fontsize=13)
+
+for ax, (feat, label) in zip(axes.flat, features_plot):
+    ax.plot(cvx['fiscal_year'], cvx[feat],
+            color='#FFB347', linewidth=2, marker='o', markersize=5)
+    for ano in anos_anomalos_cvx:
+        val = cvx[cvx['fiscal_year'] == ano][feat]
+        if len(val) > 0 and not val.isna().values[0]:
+            ax.axvline(x=ano, color='red', linestyle='--', alpha=0.5)
+            ax.scatter([ano], [val.values[0]], color='red', zorder=5, s=80)
+    ax.set_title(label, fontsize=10)
+    ax.set_xlabel('Año', fontsize=9)
+    ax.set_xticks(range(2016, 2025))
+    ax.tick_params(axis='x', rotation=45)
+    ax.grid(alpha=0.3)
+
+plt.tight_layout()
+plt.savefig('14_evolucion_cvx_anomalias.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 14 guardado")
+
+print("\nTodos los graficos guardados en la carpeta tesis_modelos")
+
 print("\n\nLISTO - Todos los escenarios corrieron correctamente")
+
+
+# ============================================================
+# GRAFICO 10b: Heatmap solo integradas - Sin imputacion
+# ============================================================
+empresas_integradas_orden = ['XOM', 'CVX', 'SHEL', 'TTE', 'COP', 'OXY']
+anos = list(range(2016, 2025))
+
+matriz_int = pd.DataFrame(index=empresas_integradas_orden, columns=anos, data=0)
+for _, row in r3.iterrows():
+    emp = row['company']
+    ano = int(row['fiscal_year'])
+    if emp in empresas_integradas_orden and ano in anos:
+        matriz_int.loc[emp, ano] = int(row['consenso'])
+
+# Marcar sin datos
+datos_disp_int = ratios[ratios['company'].isin(integradas)][['company', 'fiscal_year'] + features_base].dropna()
+for emp in empresas_integradas_orden:
+    for ano in anos:
+        tiene_dato = len(datos_disp_int[
+            (datos_disp_int['company'] == emp) &
+            (datos_disp_int['fiscal_year'] == ano)
+        ]) > 0
+        if not tiene_dato:
+            matriz_int.loc[emp, ano] = -1
+
+fig, ax = plt.subplots(figsize=(14, 5))
+matriz_int_plot = matriz_int.astype(float).replace(-1, np.nan)
+sns.heatmap(
+    matriz_int_plot,
+    annot=True, fmt='.0f',
+    cmap='YlOrRd',
+    vmin=0, vmax=4,
+    linewidths=0.5, linecolor='white',
+    ax=ax,
+    cbar_kws={'label': 'Modelos que detectaron anomalia (0-4)'}
+)
+ax.set_title('Figura 10b. Mapa de Anomalías — Solo Empresas Integradas\n(Sin imputación — celdas grises = sin dato)',
+             fontsize=13, pad=15)
+ax.set_xlabel('Año fiscal', fontsize=11)
+ax.set_ylabel('Empresa', fontsize=11)
+plt.tight_layout()
+plt.savefig('10b_heatmap_anomalias_integradas.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 10b guardado")
+
+
+# ============================================================
+# GRAFICO 11b: Heatmap solo integradas - Con imputacion
+# ============================================================
+matriz_int_imp = pd.DataFrame(index=empresas_integradas_orden, columns=anos, data=0)
+for _, row in r3_imp.iterrows():
+    emp = row['company']
+    ano = int(row['fiscal_year'])
+    if emp in empresas_integradas_orden and ano in anos:
+        matriz_int_imp.loc[emp, ano] = int(row['consenso'])
+
+fig, ax = plt.subplots(figsize=(14, 5))
+sns.heatmap(
+    matriz_int_imp.astype(float),
+    annot=True, fmt='.0f',
+    cmap='YlOrRd',
+    vmin=0, vmax=4,
+    linewidths=0.5, linecolor='white',
+    ax=ax,
+    cbar_kws={'label': 'Modelos que detectaron anomalia (0-4)'}
+)
+ax.set_title('Figura 11b. Mapa de Anomalías — Solo Empresas Integradas\n(Con imputación por promedio de categoría)',
+             fontsize=13, pad=15)
+ax.set_xlabel('Año fiscal', fontsize=11)
+ax.set_ylabel('Empresa', fontsize=11)
+plt.tight_layout()
+plt.savefig('11b_heatmap_anomalias_integradas_imputacion.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 11b guardado")
+
+# ============================================================
+# ESCENARIO ESPECIAL: Con impairment como feature adicional
+# ============================================================
+features_impairment = features_base + ['impairment_pct_rev']
+
+print("\n\n" + "="*60)
+print("ESCENARIO ESPECIAL: Con impairment como feature adicional")
+print("="*60)
+
+r_imp_especial = correr_modelos(ratios, features_impairment,
+    "Con impairment - Todas las empresas")
+diagnosticar_anomalias(ratios, features_impairment, r_imp_especial,
+    "Con impairment - Todas las empresas")
+
+# Grafico
+empresas_orden = ['XOM', 'CVX', 'SHEL', 'TTE', 'COP', 'OXY', 'EOG', 'PXD', 'EQNR']
+anos = list(range(2016, 2025))
+
+matriz_imp_esp = pd.DataFrame(index=empresas_orden, columns=anos, data=0)
+for _, row in r_imp_especial.iterrows():
+    emp = row['company']
+    ano = int(row['fiscal_year'])
+    if emp in empresas_orden and ano in anos:
+        matriz_imp_esp.loc[emp, ano] = int(row['consenso'])
+
+datos_imp = ratios[['company', 'fiscal_year'] + features_impairment].dropna()
+for emp in empresas_orden:
+    for ano in anos:
+        tiene_dato = len(datos_imp[
+            (datos_imp['company'] == emp) &
+            (datos_imp['fiscal_year'] == ano)
+        ]) > 0
+        if not tiene_dato:
+            matriz_imp_esp.loc[emp, ano] = -1
+
+fig, ax = plt.subplots(figsize=(14, 6))
+sns.heatmap(
+    matriz_imp_esp.astype(float).replace(-1, np.nan),
+    annot=True, fmt='.0f',
+    cmap='YlOrRd',
+    vmin=0, vmax=4,
+    linewidths=0.5, linecolor='white',
+    ax=ax,
+    cbar_kws={'label': 'Modelos que detectaron anomalia (0-4)'}
+)
+ax.set_title('Figura 10c. Mapa de Anomalías — Con Impairment como Feature\n(celdas grises = sin dato)',
+             fontsize=13, pad=15)
+ax.set_xlabel('Año fiscal', fontsize=11)
+ax.set_ylabel('Empresa', fontsize=11)
+plt.tight_layout()
+plt.savefig('10c_heatmap_impairment.png', dpi=150, bbox_inches='tight')
+plt.close()
+print("Grafico 10c guardado")
