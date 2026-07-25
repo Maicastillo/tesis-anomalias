@@ -1,0 +1,13 @@
+# Dependencias de Node (se regeneran con "npm install", no se versionan)
+node_modules/
+
+# Archivo de salida generado por el script (pesado y regenerable;
+# el dato "oficial" que usa el resto de la tesis vive en data/raw/)
+Master_Energy_Financials.xlsx
+
+# Basura de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*

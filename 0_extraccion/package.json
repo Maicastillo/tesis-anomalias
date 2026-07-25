@@ -1,0 +1,13 @@
+{
+  "name": "sec-api-extractor",
+  "version": "1.0.0",
+  "description": "Extracts 10-K/20-F data from SEC EDGAR (via sec-api.io) to Excel",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "sec-api": "latest",
+    "xlsx": "latest"
+  }
+}
